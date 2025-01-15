@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>node-sqlite3调试解读</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+    }
+
+    h1,
+    h2 {
+      margin-top: 20px;
+    }
+
+    code {
+      background-color: #f4f4f4;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    pre {
+      background-color: #f4f4f4;
+      padding: 10px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>node-sqlite3调试解读</h1>
+
+  <h2>调试概述</h2>
+  <p>
+    使用线程池编写异步函数会移除栈追踪信息，这使得调试变得困难，因为只能看到错误消息，而无法得知是哪个语句导致了错误。<code>node-sqlite3</code> 提供了详细模式来捕获入队查询时的栈追踪信息，可通过调用 <code>sqlite3.verbose()</code> 启用，或在引入模块时直接使用 <code>var sqlite3 = require('sqlite3').verbose()</code>。但要注意，在生产环境中不应启用详细模式，因为收集栈追踪的性能开销较大。
+  </p>
+
+  <h2>详细模式下的错误处理</h2>
+  <h3>错误信息增强</h3>
+  <p>当从传递给数据库函数的回调中抛出错误时，<code>node-sqlite3</code> 会附加原始调用的栈追踪信息，示例如下：</p>
+  <pre><code>Error: SQLITE_RANGE: bind or column index out of range
+--> in Database#run('CREATE TABLE foo (a, b)', 3, [Function])
+    at Object.<anonymous> (demo.js:5:4)
+    at Module._compile (module.js:374:26)
+    at Object..js (module.js:380:10)
+    at Module.load (module.js:306:31)
+    at Function._load (module.js:272:10)
+    at Array.<anonymous> (module.js:393:10)
+    at EventEmitter._tickCallback (node.js:108:26)</code></pre>
+  <h3>当前限制</h3>
+  <p>详细模式目前不会向 <code>Statement</code> 或 <code>Database</code> 对象发出的错误对象添加栈追踪信息。</p>
+
+  <h2>Database对象的事件用于调试</h2>
+  <h3>trace事件（Database#on('trace', [callback])）</h3>
+  <p><strong>触发时机</strong>：每当查询运行时触发。</p>
+  <p><strong>回调参数</strong>：回调的第一个且唯一参数是发送到数据库的SQL字符串。查询一执行（如使用 <code>.run()</code> 或 <code>.get()</code>）就会触发该事件，单个语句可能会多次触发。</p>
+  <p><strong>注意事项</strong>：<code>EXPLAIN</code> 语句不会触发该事件，所以可以安全地将从该事件接收到的所有SQL查询加上 <code>EXPLAIN QUERY PLAN</code> 前缀后重新发送到数据库。如果在该回调中执行语句，要确保不会进入无限循环。</p>
+  <h3>profile事件（Database#on('profile', [callback])）</h3>
+  <p><strong>触发时机</strong>：每当查询完成时触发。</p>
+  <p><strong>回调参数</strong>：第一个参数是发送到数据库的SQL字符串，第二个参数是查询执行大约花费的时间（以毫秒为单位）。该事件在查询完成后触发。</p>
+  <p><strong>注意事项</strong>：同样，如果在该回调中执行语句，要避免进入无限循环。</p>
+
+</body>
+
+</html>

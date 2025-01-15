@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>node-sqlite3 API 解读</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin-top: 20px;
+    }
+
+    code {
+      background-color: #f4f4f4;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    pre {
+      background-color: #f4f4f4;
+      padding: 10px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>node-sqlite3 API 解读</h1>
+
+  <h2>安装与概述</h2>
+  <p>
+    需按照安装说明安装 <code>sqlite3</code> 库。建议使用 GitHub 目录浏览 API 文档。注意不传递 <code>callback</code> 并不会使 API 同步执行。
+  </p>
+
+  <h2>new sqlite3.Database(filename [, mode] [, callback])</h2>
+  <p>创建并自动打开一个新的数据库连接，返回 <code>Database</code> 对象。</p>
+  <h3>参数</h3>
+  <ul>
+    <li>
+      <code>filename</code>：数据库文件名，有效值包括普通文件名、<code>":memory:"</code>（创建匿名内存数据库）和空字符串（创建匿名磁盘数据库，关闭连接时内容丢失）。
+    </li>
+    <li>
+      <code>mode</code>（可选）：数据库打开模式，如 <code>sqlite3.OPEN_READONLY</code>（只读）、<code>sqlite3.OPEN_READWRITE</code>（读写）、<code>sqlite3.OPEN_CREATE</code>（若不存在则创建）等，默认值为 <code>OPEN_READWRITE | OPEN_CREATE | OPEN_FULLMUTEX</code>。
+    </li>
+    <li>
+      <code>callback</code>（可选）：数据库打开成功或失败时的回调函数。成功时，第一个参数为 <code>null</code>；失败时，第一个参数为错误对象。若未提供回调且发生错误，数据库对象将发出 <code>error</code> 事件；成功打开时，无论是否提供回调，都会发出 <code>open</code> 事件。
+    </li>
+  </ul>
+
+  <h2>sqlite3.verbose()</h2>
+  <p>设置执行模式为详细模式，产生长栈跟踪信息，无法重置。用于调试，更多信息可参考调试相关的 wiki 页面。</p>
+
+  <h2>Database 对象方法</h2>
+  <h3>close([callback])</h3>
+  <p>关闭数据库连接。</p>
+  <h4>参数与回调</h4>
+  <p><code>callback</code>（可选），关闭成功或失败时调用。成功时，第一个参数为 <code>null</code>；失败时，第一个参数为错误对象。未提供回调且发生错误时，数据库对象发出 <code>error</code> 事件；成功关闭时，发出 <code>close</code> 事件。</p>
+  <h3>configure(option, value)</h3>
+  <p>设置数据库的配置选项。</p>
+  <h4>有效选项</h4>
+  <ul>
+    <li><code>trace</code>：提供函数回调，在 SQL 语句执行时调用，传入语句文本渲染。</li>
+    <li><code>profile</code>：提供函数回调，每次 SQL 语句执行时调用。</li>
+    <li><code>busyTimeout</code>：提供整数值，设置忙碌超时时间。</li>
+  </ul>
+  <h3>run(sql [, param,...] [, callback])</h3>
+  <p>执行 SQL 查询，不返回结果数据，用于执行如 <code>INSERT</code>、<code>UPDATE</code>、<code>DELETE</code> 等不返回结果集的操作，可进行函数链式调用。</p>
+  <h4>参数</h4>
+  <ul>
+    <li>
+      <code>sql</code>：要执行的 SQL 查询语句。若无效且有回调，回调将收到包含 SQLite 错误消息的错误对象；若无回调且准备失败，底层 <code>Statement</code> 对象将发出 <code>error</code> 事件。
+    </li>
+    <li>
+      <code>param,...</code>（可选）：SQL 语句中的占位符参数，有三种传递方式（直接作为函数参数、数组形式、命名参数对象形式），参数不能用于列名或表名。数组或对象形式的参数必须是绑定参数列表中的第一个值，否则抛出错误，其后的额外绑定参数将被忽略。
+    </li>
+    <li>
+      <code>callback</code>（可选）：执行过程中发生错误或查询执行后调用。错误时，第一个参数为错误对象；成功时，第一个参数为 <code>null</code>，此时 <code>this</code> 对象包含 <code>lastID</code>（仅 <code>INSERT</code> 成功时有意义，为最后插入行的 ID）和 <code>changes</code>（仅 <code>UPDATE</code> 或 <code>DELETE</code> 成功时有意义，为受影响的行数）属性。注意需使用传统函数风格的回调，否则 <code>this.lastID</code> 和 <code>this.changes</code> 为 <code>undefined</code>。
+    </li>
+  </ul>
+  <h3>get(sql [, param,...] [, callback])</h3>
+  <p>执行 SQL 查询，返回单个结果行，用于获取单个记录，可链式调用。</p>
+  <h4>参数与回调</h4>
+  <p>参数与 <code>run</code> 方法类似，回调签名为 <code>function(err, row) {}</code>，结果集为空时 <code>row</code> 为 <code>undefined</code>，否则为包含第一行值的对象，属性名对应结果集的列名，只能通过列名访问。</p>
+  <h3>all(sql [, param,...] [, callback])</h3>
+  <p>执行 SQL 查询，返回所有结果行，将所有结果行检索到内存中，可链式调用。</p>
+  <h4>参数与回调</h4>
+  <p>参数与 <code>run</code> 方法类似，回调签名为 <code>function(err, rows) {}</code>，<code>rows</code> 为数组，结果集为空时为 <code>[]</code>，否则每个元素为包含对应行值的对象，类似 <code>get</code> 方法。对于可能返回大量结果集的查询，建议使用 <code>each</code> 或 <code>prepare</code> + 多次 <code>Statement#get</code>。</p>
+  <h3>each(sql [, param,...] [, callback] [, complete])</h3>
+  <p>执行 SQL 查询，对每个结果行调用一次回调，可链式调用。</p>
+  <h4>参数与回调</h4>
+  <ul>
+    <li>参数与 <code>run</code> 方法类似。</li>
+    <li>回调签名为 <code>function(err, row) {}</code>，结果集为空时不调用回调，否则每行调用一次，调用顺序与结果集中行的顺序一致。</li>
+    <li>
+      <code>complete</code>（可选）：所有行回调调用后调用，第一个参数为错误对象，第二个参数为检索到的行数。若只指定一个函数，视为行回调；指定两个函数时，第一个为行回调，最后一个为完成回调。若查询返回行数有限，使用 <code>all</code> 方法可能更方便。目前无法中止执行。
+    </li>
+  </ul>
+  <h3>exec(sql [, callback])</h3>
+  <p>执行提供字符串中的所有 SQL 查询，不检索结果行，可链式调用。</p>
+  <h4>参数与回调</h4>
+  <p>若查询失败，后续语句不执行（若要全部或无执行，需包裹在事务中）。执行完成或发生错误时调用回调，第一个参数为 <code>null</code> 或错误对象。未提供回调且发生错误时，数据库对象发出 <code>error</code> 事件。注意仅执行到第一个 <code>NULL</code> 字节处的语句。</p>
+  <h3>prepare(sql [, param,...] [, callback])</h3>
+  <p>准备 SQL 语句，可绑定参数，完成后调用回调，返回 <code>Statement</code> 对象。</p>
+  <h4>参数与回调</h4>
+  <p>准备成功时，回调的第一个且唯一参数为 <code>null</code>，否则为错误对象。提供绑定参数时，在调用回调前绑定到准备好的语句。</p>
+  <h3>map(sql [, callback])</h3>
+  <p><code>Statement#map</code> 的快捷方式，用于将结果以对象形式返回（而非数组）。</p>
+  <h3>loadExtension(path [, callback])</h3>
+  <p>将编译好的 SQLite 扩展加载到数据库连接对象中。</p>
+  <h4>参数与回调</h4>
+  <p><code>path</code> 为要加载的扩展文件名；<code>callback</code>（可选），加载成功或失败时调用，成功时第一个参数为 <code>null</code>，失败时为错误对象。未提供回调且发生错误时，数据库对象发出 <code>error</code> 事件。注意确保加载的扩展与 <code>node-sqlite3</code> 编译时使用的版本兼容，否则可能导致不可预测的行为。</p>
+  <h3>interrupt()</h3>
+  <p>允许用户中断长时间运行的查询，通过 <code>sqlite3_interrupt</code> 实现，使其他数据获取函数收到错误码为 <code>sqlite3.INTERRUPT</code> 的错误。数据库必须打开才能使用此函数。</p>
+
+  <h2>Statement 对象方法</h2>
+  <h3>bind([param,...] [, callback])</h3>
+  <p>将参数绑定到准备好的语句，完成或发生错误时调用回调，可链式调用。</p>
+  <h4>参数与回调</h4>
+  <p>绑定成功时，回调的第一个且唯一参数为 <code>null</code>，否则为错误对象。绑定参数会完全重置语句对象和行游标，并移除之前绑定的参数（若有）。</p>
+  <h3>reset([callback])</h3>
+  <p>重置语句的行游标，保留参数绑定，可用于重新执行相同查询，可链式调用。</p>
+  <h4>回调</h4>
+  <p>重置完成后调用，第一个且唯一参数始终为 <code>null</code>。</p>
+  <h3>finalize([callback])</h3>
+  <p>完成语句操作，释放资源。</p>
+  <h4>必要性</h4>
+  <p>通常可选，但如果下一个查询执行前有长时间延迟，可能需要显式完成语句，例如执行独占查询后。完成后，对该语句对象的所有进一步函数调用将抛出错误。</p>
+  <h3>run([param,...] [, callback])</h3>
+  <p>绑定参数并执行语句，可链式调用。</p>
+  <h4>参数与执行</h4>
+  <p>指定绑定参数时，在执行前绑定到语句，绑定或执行时会重置绑定和行游标。回调行为与 <code>Database#run</code> 类似，但执行后语句不会自动完成，可多次运行。</p>
+  <h3>get([param,...] [, callback])</h3>
+  <p>绑定参数、执行语句并检索第一行结果，可链式调用。</p>
+  <h4>参数与回调</h4>
+  <p>参数与 <code>Statement#run</code> 类似，回调签名为 <code>function(err, row) {}</code>，结果集为空时 <code>row</code> 为 <code>undefined</code>，否则为包含第一行值的对象。执行此方法后数据库可能处于锁定状态，等待进一步调用 <code>Statement#get</code> 检索后续行，应使用 <code>finalize</code> 或 <code>reset</code> 告知数据库检索完成。</p>
+  <h3>all([param,...] [, callback])</h3>
+  <p>绑定参数、执行语句并返回所有结果行，可链式调用。</p>
+  <h4>参数与回调</h4>
+  <p>参数与 <code>Statement#run</code> 类似，回调签名为 <code>function(err, rows) {}</code>，结果集为空时 <code>rows</code> 为 <code>[]</code>，否则每个元素为包含对应行值的对象。执行后语句不自动完成。</p>
+  <h3>each([param,...] [, callback] [, complete])</h3>
+  <p>绑定参数、执行语句并对每个结果行调用回调，可链式调用。</p>
+  <h4>参数与回调</h4>
+  <ul>
+    <li>参数与 <code>Statement#run</code> 类似。</li>
+    <li>回调签名为 <code>function(err, row) {}</code>，结果集为空时不调用回调，否则每行调用一次，调用顺序与结果集中行的顺序一致。</li>
+    <li>
+      <code>complete</code>（可选）：所有行回调调用后调用，第一个参数为错误对象，第二个参数为检索到的行数。若只指定一个函数，视为行回调；指定两个函数时，第一个为行回调，最后一个为完成回调。若查询返回行数有限，使用 <code>Statement#all</code> 可能更方便。目前无法中止执行。
+    </li>
+  </ul>
+
+  <h2>示例</h2>
+  <h3>直接传递参数执行 UPDATE 语句</h3>
+  <pre><code>const sqlite3 = require('sqlite3').verbose();
+let db = new sqlite3.Database(':memory:');
+
+db.run("UPDATE tbl SET name =? WHERE id =?", "bar", 2, function(err) {
+    if (err) {
+        return console.log(err.message);
+    }
+    console.log(`Rows updated: ${this.changes}`);
+});
+
+db.close();</code></pre>
+  <h3>使用数组传递参数执行 INSERT 语句并获取插入的 lastID</h3>
+  <pre><code>const sqlite3 = require('sqlite3').verbose();
+let db = new sqlite3.Database(':memory:');
+
+db.run("INSERT INTO tbl (name) VALUES (?)", ["foo"], function(err) {
+    if (err) {
+        return console.log(err.message);
+    }
+    console.log(`Last inserted ID: ${this.lastID}`);
+});
+
+db.close();</code></pre>
+  <h3>使用命名参数执行 SELECT 语句获取单个结果</h3>
+  <pre><code>const sqlite3 = require('sqlite3').verbose();
+let db = new sqlite3.Database(':memory:');
+
+db.get("SELECT * FROM tbl WHERE id = $id", { $id: 1 }, function(err, row) {
+    if (err) {
+        return console.log(err.message);
+    }
+    console.log(row);
+});
+
+db.close();</code></pre>
+  <h3>使用 each 方法遍历结果集</h3>
+  <pre><code>const sqlite3 = require('sqlite3').verbose();
+let db = new sqlite3.Database(':memory:');
+
+db.each("SELECT * FROM tbl", function(err, row) {
+    if (err) {
+        return console.log(err.message);
+    }
+    console.log(row);
+}, function(err, count) {
+    if (err) {
+        return console.log(err.message);
+    }
+    console.log(`Total rows: ${count}`);
+});
+
+db.close();</code></pre>
+
+</body>
+
+</html>

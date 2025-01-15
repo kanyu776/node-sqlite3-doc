@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>node-sqlite3执行流程控制解读</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+    }
+
+    h1,
+    h2 {
+      margin-top: 20px;
+    }
+
+    code {
+      background-color: #f4f4f4;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    pre {
+      background-color: #f4f4f4;
+      padding: 10px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>node-sqlite3执行流程控制解读</h1>
+
+  <h2>概述</h2>
+  <p>
+    <code>node-sqlite3</code>默认的执行模式是并行执行语句。但 <code>Database#close</code> 方法始终以独占模式运行，即等待所有之前的查询完成，在关闭操作等待期间，<code>node-sqlite3</code> 不会运行其他查询。该库提供了 <code>Database#serialize([callback])</code> 和 <code>Database#parallelize([callback])</code> 两个函数来帮助控制执行流程。
+  </p>
+
+  <h2>Database#serialize([callback])</h2>
+  <h3>功能</h3>
+  <p>将执行模式设置为串行化。这意味着同一时间最多只有一个语句对象可以执行查询，其他语句在队列中等待，直到前一个语句执行完成。</p>
+  <h3>回调函数使用</h3>
+  <p>如果提供了 <code>callback</code>，它将立即被调用。在该回调函数中安排的所有数据库查询都将被串行化执行。在嵌套函数中调用 <code>Database#serialize()</code> 是安全的，内部的串行化设置不会影响外部的执行模式，例如：</p>
+  <pre><code>// 此处安排的查询将并行运行
+db.serialize(function() {
+  // 此处安排的查询将被串行化
+  db.serialize(function() {
+    // 此处安排的查询仍将被串行化
+  });
+  // 此处安排的查询仍将被串行化
+});
+// 此处安排的查询将再次并行运行</code></pre>
+  <h3>注意事项</h3>
+  <p>不是直接在回调函数中安排的查询不一定会被串行化，例如：</p>
+  <pre><code>db.serialize(function() {
+  // 这两个查询将顺序执行
+  db.run("CREATE TABLE foo (num)");
+  db.run("INSERT INTO foo VALUES (?)", 1, function() {
+    // 这些查询将并行运行，并且第二个查询可能会失败，因为表可能还不存在
+    db.run("CREATE TABLE bar (num)");
+    db.run("INSERT INTO bar VALUES (?)", 1);
+  });
+});</code></pre>
+  <p>如果不带函数参数调用 <code>Database#serialize()</code>，执行模式设置将是“粘性”的，直到下一次调用 <code>Database#parallelize</code> 才会改变。</p>
+
+  <h2>Database#parallelize([callback])</h2>
+  <h3>功能</h3>
+  <p>将执行模式设置为并行化，意味着安排的查询将并行运行。</p>
+  <h3>回调函数使用</h3>
+  <p>如果提供了 <code>callback</code>，它将立即被调用。在该回调函数中安排的所有数据库查询都将并行运行。在嵌套函数中调用 <code>Database#parallelize()</code> 是安全的，内部的并行化设置不会影响外部的执行模式，例如：</p>
+  <pre><code>db.serialize(function() {
+  // 此处安排的查询将被串行化
+  db.parallelize(function() {
+    // 此处安排的查询将并行运行
+  });
+  // 此处安排的查询将再次被串行化
+});</code></pre>
+  <h3>注意事项</h3>
+  <p>如果不带函数参数调用 <code>Database#parallelize()</code>，执行模式设置将是“粘性”的，直到下一次调用 <code>Database#serialize</code> 才会改变。</p>
+
+  <h2>总结</h2>
+  <p>
+    <code>node-sqlite3</code> 提供了灵活的执行模式控制，开发人员可以根据具体需求在并行和串行执行模式之间切换，以优化数据库操作的性能和逻辑正确性。正确使用 <code>Database#serialize([callback])</code> 和 <code>Database#parallelize([callback])</code> 函数，特别是注意回调函数内外执行模式的影响以及不带参数调用时执行模式的“粘性”特点，有助于避免因执行顺序不当导致的错误，如查询依赖关系未正确处理等问题。
+  </p>
+
+</body>
+
+</html>
